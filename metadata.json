@@ -1,0 +1,6 @@
+{
+  "name": "Restaurant Management System",
+  "description": "Enterprise-level Restaurant Management System (RMS) with POS, KDS, Table floor plan, Inventory, Accounting, Orders, and PHP MVC backend setup.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
