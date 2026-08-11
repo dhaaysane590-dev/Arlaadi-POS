@@ -1,0 +1,68 @@
+version: '3.8'
+
+services:
+  # POS Application Service (Express + Vite React)
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: pos_app
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - MYSQL_HOST=db
+      - MYSQL_PORT=3306
+      - MYSQL_USER=root
+      - MYSQL_PASSWORD=root_password
+      - MYSQL_DATABASE=palace_bistro_pos
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - pos_network
+
+  # MySQL Database Service
+  db:
+    image: mysql:8.0
+    container_name: pos_mysql
+    restart: always
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: root_password
+      MYSQL_DATABASE: palace_bistro_pos
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-proot_password"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - pos_network
+
+  # phpMyAdmin Database Management Interface
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin:latest
+    container_name: pos_phpmyadmin
+    restart: always
+    ports:
+      - "8080:80"
+    environment:
+      PMA_HOST: db
+      PMA_PORT: 3306
+      MYSQL_ROOT_PASSWORD: root_password
+    depends_on:
+      - db
+    networks:
+      - pos_network
+
+volumes:
+  mysql_data:
+
+networks:
+  pos_network:
+    driver: bridge

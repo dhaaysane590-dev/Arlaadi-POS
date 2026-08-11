@@ -326,7 +326,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
               <div className="d-flex align-items-center justify-content-between mb-3 border-bottom pb-2">
                 <div className="d-flex align-items-center gap-2 text-dark">
                   <Lock className="w-5 h-5 text-danger" />
-                  <h2 className="h6 fw-bold mb-0">Fadlan geli Pin-kaaga</h2>
+                  <h2 className="h6 fw-bold mb-0">System Authentication</h2>
                 </div>
                 <span className="badge bg-danger-subtle text-danger border border-danger-subtle fw-bold">
                   PIN Security Required
