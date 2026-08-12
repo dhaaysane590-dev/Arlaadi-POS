@@ -1,12 +1,57 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
+// Global polyfill / monkey-patch to ensure browser Headers.set and append never crash on non-ISO-8859-1 chars
+if (typeof window !== 'undefined' && window.Headers) {
+  const originalSet = Headers.prototype.set;
+  Headers.prototype.set = function (name: string, value: string) {
+    const cleanName = typeof name === 'string' ? name.replace(/[^\x20-\x7E]/g, '') : name;
+    const cleanValue = typeof value === 'string' ? value.replace(/[^\x20-\x7E]/g, '') : value;
+    try {
+      return originalSet.call(this, cleanName, cleanValue);
+    } catch {
+      // Fallback ignore if any header cannot be set
+    }
+  };
+
+  const originalAppend = Headers.prototype.append;
+  Headers.prototype.append = function (name: string, value: string) {
+    const cleanName = typeof name === 'string' ? name.replace(/[^\x20-\x7E]/g, '') : name;
+    const cleanValue = typeof value === 'string' ? value.replace(/[^\x20-\x7E]/g, '') : value;
+    try {
+      return originalAppend.call(this, cleanName, cleanValue);
+    } catch {
+      // Fallback ignore
+    }
+  };
+}
+
+function cleanHeaderString(val: any): string {
+  if (typeof val !== 'string') return '';
+  let cleaned = val.trim();
+  if ((cleaned.startsWith('"') && cleaned.endsWith('"')) || (cleaned.startsWith("'") && cleaned.endsWith("'"))) {
+    cleaned = cleaned.slice(1, -1);
+  }
+  return cleaned
+    .replace(/[\u201C\u201D\u2018\u2019]/g, '') // remove smart quotes
+    .replace(/[^\x20-\x7E]/g, '')               // strip non-printable / non-ASCII chars
+    .trim();
+}
+
 let supabaseClient: SupabaseClient | null = null;
 
 export function getSupabase(): SupabaseClient | null {
   if (supabaseClient) return supabaseClient;
 
-  const url = process.env.SUPABASE_URL || (typeof import.meta !== 'undefined' && import.meta.env?.VITE_SUPABASE_URL);
-  const key = process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || (typeof import.meta !== 'undefined' && import.meta.env?.VITE_SUPABASE_ANON_KEY);
+  const rawUrl = process.env.SUPABASE_URL || (typeof import.meta !== 'undefined' && import.meta.env?.VITE_SUPABASE_URL) || 'https://vqehvptmlmyyyhjvdixd.supabase.co';
+  const rawKey = process.env.SUPABASE_PUBLISHABLE_KEY || 
+                 process.env.SUPABASE_ANON_KEY || 
+                 process.env.SUPABASE_SECRET_KEY || 
+                 process.env.SUPABASE_SERVICE_ROLE_KEY || 
+                 (typeof import.meta !== 'undefined' && (import.meta.env?.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env?.VITE_SUPABASE_ANON_KEY)) || 
+                 'sb_publishable_TlhD621unHtqRgqygMJT0A_Zs5JGi8T';
+
+  const url = cleanHeaderString(rawUrl);
+  const key = cleanHeaderString(rawKey);
 
   if (!url || !key) {
     return null;
@@ -18,6 +63,37 @@ export function getSupabase(): SupabaseClient | null {
 
 export function isSupabaseConfigured(): boolean {
   return getSupabase() !== null;
+}
+
+/**
+ * Tests connection to Supabase database.
+ * Returns { ok: true } if connection succeeds, or { ok: false, error: string } if it fails.
+ */
+export async function testSupabaseConnection(): Promise<{ ok: boolean; error?: string }> {
+  const supabase = getSupabase();
+  if (!supabase) {
+    return {
+      ok: false,
+      error: 'Supabase credentials are missing. Please configure SUPABASE_URL and SUPABASE_ANON_KEY.'
+    };
+  }
+
+  try {
+    // Attempt a light query to verify table access and network connectivity
+    const { error } = await supabase.from('settings').select('id').limit(1);
+    if (error) {
+      return {
+        ok: false,
+        error: `Database Connection Failed: ${error.message} (Code: ${error.code || 'UNKNOWN'})`
+      };
+    }
+    return { ok: true };
+  } catch (err: any) {
+    return {
+      ok: false,
+      error: `Network / Server Error: ${err?.message || 'Unable to reach Supabase server'}`
+    };
+  }
 }
 
 /**

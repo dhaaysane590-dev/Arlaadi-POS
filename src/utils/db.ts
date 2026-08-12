@@ -136,7 +136,7 @@ function setItem<T>(key: string, value: T): void {
 
 export const db = {
   // Orders
-  getOrders: (): Order[] => getItem<Order[]>(DB_KEYS.ORDERS, initialOrders),
+  getOrders: (): Order[] => getItem<Order[]>(DB_KEYS.ORDERS, []),
   saveOrders: (orders: Order[]) => setItem(DB_KEYS.ORDERS, orders),
 
   // Menu Items
@@ -144,23 +144,23 @@ export const db = {
   saveMenuItems: (items: MenuItem[]) => setItem(DB_KEYS.MENU_ITEMS, items),
 
   // Categories
-  getCategories: (): MenuCategory[] => getItem<MenuCategory[]>(DB_KEYS.CATEGORIES, initialCategories),
+  getCategories: (): MenuCategory[] => getItem<MenuCategory[]>(DB_KEYS.CATEGORIES, []),
   saveCategories: (categories: MenuCategory[]) => setItem(DB_KEYS.CATEGORIES, categories),
 
   // Tables
-  getTables: (): RestaurantTable[] => getItem<RestaurantTable[]>(DB_KEYS.TABLES, initialTables),
+  getTables: (): RestaurantTable[] => getItem<RestaurantTable[]>(DB_KEYS.TABLES, []),
   saveTables: (tables: RestaurantTable[]) => setItem(DB_KEYS.TABLES, tables),
 
   // Reservations
-  getReservations: (): Reservation[] => getItem<Reservation[]>(DB_KEYS.RESERVATIONS, initialReservations),
+  getReservations: (): Reservation[] => getItem<Reservation[]>(DB_KEYS.RESERVATIONS, []),
   saveReservations: (res: Reservation[]) => setItem(DB_KEYS.RESERVATIONS, res),
 
   // Inventory / Ingredients
-  getInventory: (): Ingredient[] => getItem<Ingredient[]>(DB_KEYS.INVENTORY, initialIngredients),
+  getInventory: (): Ingredient[] => getItem<Ingredient[]>(DB_KEYS.INVENTORY, []),
   saveInventory: (items: Ingredient[]) => setItem(DB_KEYS.INVENTORY, items),
 
   // Employees
-  getEmployees: (): Employee[] => getItem<Employee[]>(DB_KEYS.EMPLOYEES, initialEmployees),
+  getEmployees: (): Employee[] => getItem<Employee[]>(DB_KEYS.EMPLOYEES, []),
   saveEmployees: (emps: Employee[]) => setItem(DB_KEYS.EMPLOYEES, emps),
 
   // POS Days
@@ -209,15 +209,15 @@ export const db = {
   saveFloors: (floors: FloorRecord[]) => setItem(DB_KEYS.FLOORS, floors),
 
   // Customers
-  getCustomers: (): Customer[] => getItem<Customer[]>(DB_KEYS.CUSTOMERS, initialCustomers),
+  getCustomers: (): Customer[] => getItem<Customer[]>(DB_KEYS.CUSTOMERS, []),
   saveCustomers: (custs: Customer[]) => setItem(DB_KEYS.CUSTOMERS, custs),
 
   // Expenses
-  getExpenses: (): Expense[] => getItem<Expense[]>(DB_KEYS.EXPENSES, initialExpenses),
+  getExpenses: (): Expense[] => getItem<Expense[]>(DB_KEYS.EXPENSES, []),
   saveExpenses: (expenses: Expense[]) => setItem(DB_KEYS.EXPENSES, expenses),
 
   // Activity Logs
-  getLogs: (): ActivityLog[] => getItem<ActivityLog[]>(DB_KEYS.LOGS, initialLogs),
+  getLogs: (): ActivityLog[] => getItem<ActivityLog[]>(DB_KEYS.LOGS, []),
   saveLogs: (logs: ActivityLog[]) => setItem(DB_KEYS.LOGS, logs),
 
   // Settings

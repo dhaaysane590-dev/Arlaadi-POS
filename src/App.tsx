@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { db, triggerSystemDbSync } from './utils/db';
+import { testSupabaseConnection } from './utils/supabase';
 import {
   User,
   UserRole,
@@ -244,29 +245,46 @@ export default function App() {
     ];
   });
 
-  // Load initial live data from Supabase if configured
-  useEffect(() => {
-    async function loadSupabaseData() {
-      try {
-        const data = await db.loadFromSupabase();
-        if (data) {
-          if (data.categories && data.categories.length > 0) setCategories(data.categories);
-          if (data.menuItems && data.menuItems.length > 0) setMenuItems(data.menuItems as any);
-          if (data.tables && data.tables.length > 0) setTables(data.tables as any);
-          if (data.orders && data.orders.length > 0) setOrders(data.orders as any);
-          if (data.customers && data.customers.length > 0) setCustomers(data.customers as any);
-          if (data.inventory && data.inventory.length > 0) setIngredients(data.inventory as any);
-          if (data.employees && data.employees.length > 0) setEmployees(data.employees as any);
-          if (data.expenses && data.expenses.length > 0) setExpenses(data.expenses as any);
-          if (data.tenants && data.tenants.length > 0) setTenants(data.tenants as any);
-          if (data.settings) setSettings(data.settings as any);
-        }
-      } catch (err) {
-        console.warn('[App Supabase Load Warning]', err);
-      }
+  // Database Connection Enforcement State
+  const [dbConnectionError, setDbConnectionError] = useState<string | null>(null);
+  const [isCheckingDb, setIsCheckingDb] = useState<boolean>(true);
+
+  // Verify and Load initial live data from Supabase
+  const initDbCheckAndLoad = useCallback(async () => {
+    setIsCheckingDb(true);
+    setDbConnectionError(null);
+
+    const testResult = await testSupabaseConnection();
+    if (!testResult.ok) {
+      setDbConnectionError(testResult.error || 'Failed to connect to Supabase database.');
+      setIsCheckingDb(false);
+      return;
     }
-    loadSupabaseData();
+
+    try {
+      const data = await db.loadFromSupabase();
+      if (data) {
+        if (data.categories && data.categories.length > 0) setCategories(data.categories);
+        if (data.menuItems && data.menuItems.length > 0) setMenuItems(data.menuItems as any);
+        if (data.tables && data.tables.length > 0) setTables(data.tables as any);
+        if (data.orders && data.orders.length > 0) setOrders(data.orders as any);
+        if (data.customers && data.customers.length > 0) setCustomers(data.customers as any);
+        if (data.inventory && data.inventory.length > 0) setIngredients(data.inventory as any);
+        if (data.employees && data.employees.length > 0) setEmployees(data.employees as any);
+        if (data.expenses && data.expenses.length > 0) setExpenses(data.expenses as any);
+        if (data.tenants && data.tenants.length > 0) setTenants(data.tenants as any);
+        if (data.settings) setSettings(data.settings as any);
+      }
+    } catch (err) {
+      console.warn('[App Supabase Load Warning]', err);
+    } finally {
+      setIsCheckingDb(false);
+    }
   }, []);
+
+  useEffect(() => {
+    initDbCheckAndLoad();
+  }, [initDbCheckAndLoad]);
 
   // DB Sync Effects - Auto Persist on any state change across the system
   useEffect(() => { db.saveOrders(orders); }, [orders]);
@@ -618,6 +636,60 @@ export default function App() {
   });
 
   const todayOrdersCount = todayOrdersList.length;
+
+  // Enforce Database Connection Check
+  if (isCheckingDb) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center p-6 text-white">
+        <div className="bg-slate-800 border border-slate-700 rounded-2xl p-8 max-w-md w-full text-center shadow-2xl">
+          <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <h2 className="text-xl font-bold mb-2">Connecting to Database...</h2>
+          <p className="text-slate-400 text-sm">Verifying connection to Supabase database. Please wait...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (dbConnectionError) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-6 text-white">
+        <div className="bg-slate-900 border border-red-500/30 rounded-2xl p-8 max-w-lg w-full text-center shadow-2xl relative overflow-hidden">
+          <div className="absolute top-0 left-0 right-0 h-1.5 bg-red-500"></div>
+          
+          <div className="w-16 h-16 bg-red-500/10 text-red-500 rounded-2xl flex items-center justify-center mx-auto mb-5 border border-red-500/20">
+            <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+          </div>
+
+          <h2 className="text-2xl font-bold text-white mb-2">Database Connection Required</h2>
+          <p className="text-slate-300 text-sm mb-6 leading-relaxed">
+            The application cannot start because the connection to the Supabase database is not configured or failed.
+          </p>
+
+          <div className="bg-slate-950/80 border border-red-500/20 rounded-xl p-4 mb-6 text-left font-mono text-xs text-red-400 break-words">
+            {dbConnectionError}
+          </div>
+
+          <div className="space-y-3 mb-6 text-left bg-slate-800/50 p-4 rounded-xl border border-slate-700/50 text-xs text-slate-300">
+            <p className="font-semibold text-slate-200 mb-1">To resolve this:</p>
+            <p>• Verify <code className="text-blue-400">SUPABASE_URL</code> and <code className="text-blue-400">SUPABASE_ANON_KEY</code> in environment variables.</p>
+            <p>• Run the database SQL script in Supabase SQL Editor.</p>
+          </div>
+
+          <button
+            onClick={() => initDbCheckAndLoad()}
+            className="w-full py-3 px-6 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-xl transition shadow-lg shadow-blue-600/20 flex items-center justify-center gap-2"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            Retry Database Connection
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (!isLoggedIn) {
     return (
