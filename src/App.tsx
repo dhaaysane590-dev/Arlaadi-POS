@@ -244,6 +244,30 @@ export default function App() {
     ];
   });
 
+  // Load initial live data from Supabase if configured
+  useEffect(() => {
+    async function loadSupabaseData() {
+      try {
+        const data = await db.loadFromSupabase();
+        if (data) {
+          if (data.categories && data.categories.length > 0) setCategories(data.categories);
+          if (data.menuItems && data.menuItems.length > 0) setMenuItems(data.menuItems as any);
+          if (data.tables && data.tables.length > 0) setTables(data.tables as any);
+          if (data.orders && data.orders.length > 0) setOrders(data.orders as any);
+          if (data.customers && data.customers.length > 0) setCustomers(data.customers as any);
+          if (data.inventory && data.inventory.length > 0) setIngredients(data.inventory as any);
+          if (data.employees && data.employees.length > 0) setEmployees(data.employees as any);
+          if (data.expenses && data.expenses.length > 0) setExpenses(data.expenses as any);
+          if (data.tenants && data.tenants.length > 0) setTenants(data.tenants as any);
+          if (data.settings) setSettings(data.settings as any);
+        }
+      } catch (err) {
+        console.warn('[App Supabase Load Warning]', err);
+      }
+    }
+    loadSupabaseData();
+  }, []);
+
   // DB Sync Effects - Auto Persist on any state change across the system
   useEffect(() => { db.saveOrders(orders); }, [orders]);
   useEffect(() => { db.saveMenuItems(menuItems); }, [menuItems]);

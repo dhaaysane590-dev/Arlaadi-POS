@@ -28,6 +28,8 @@ import {
   initialLogs
 } from '../data/mockData';
 
+import { isSupabaseConfigured, syncAllToSupabase, loadAllFromSupabase } from './supabase';
+
 const DB_KEYS = {
   ORDERS: 'pos_db_orders',
   MENU_ITEMS: 'pos_db_menu_items',
@@ -107,12 +109,12 @@ export function triggerSystemDbSync(): void {
         body: JSON.stringify(payload),
       }).catch(() => {});
 
-      // 2. Sync to MySQL / phpMyAdmin if active
-      fetch('/api/mysql/sync-all', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      }).catch(() => {});
+      // 2. Sync to Supabase cloud database if configured
+      if (isSupabaseConfigured()) {
+        syncAllToSupabase(payload).catch((err) => {
+          console.warn('[Supabase Sync Error]', err);
+        });
+      }
     } catch (err) {
       // Ignore offline server
     }
@@ -318,5 +320,45 @@ export const db = {
   // Clear or Reset DB
   resetDB: () => {
     Object.values(DB_KEYS).forEach(k => localStorage.removeItem(k));
+  },
+
+  // Load live data from Supabase tables
+  loadFromSupabase: async () => {
+    if (!isSupabaseConfigured()) return null;
+    const data = await loadAllFromSupabase();
+    if (!data) return null;
+
+    if (data.categories && data.categories.length > 0) {
+      db.saveCategories(data.categories);
+    }
+    if (data.menuItems && data.menuItems.length > 0) {
+      db.saveMenuItems(data.menuItems);
+    }
+    if (data.tables && data.tables.length > 0) {
+      db.saveTables(data.tables);
+    }
+    if (data.orders && data.orders.length > 0) {
+      db.saveOrders(data.orders);
+    }
+    if (data.customers && data.customers.length > 0) {
+      db.saveCustomers(data.customers);
+    }
+    if (data.inventory && data.inventory.length > 0) {
+      db.saveInventory(data.inventory);
+    }
+    if (data.employees && data.employees.length > 0) {
+      db.saveEmployees(data.employees);
+    }
+    if (data.expenses && data.expenses.length > 0) {
+      db.saveExpenses(data.expenses);
+    }
+    if (data.tenants && data.tenants.length > 0) {
+      db.saveTenants(data.tenants);
+    }
+    if (data.settings) {
+      db.saveSettings(data.settings);
+    }
+
+    return data;
   }
 };
