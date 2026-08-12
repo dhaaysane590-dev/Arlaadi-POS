@@ -23,13 +23,9 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
 
-# Copy dependency definitions
-COPY package.json bun.lock ./
-
-# Install dependencies (full install: vite is required at runtime by the bundled server)
-RUN bun install --frozen-lockfile
-
-# Copy built dist files from builder stage
+# Copy node_modules and dist files from builder stage
+COPY --from=builder /app/package.json ./package.json
+COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
 
 # Expose server port

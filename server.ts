@@ -254,6 +254,21 @@ async function createTablesIfNotExist() {
 // ==============================================================================
 
 // 1. Get System Database Status & Metadata
+app.get('/api/supabase/status', (req, res) => {
+  const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
+  const supabaseKey = process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
+  const databaseUrl = process.env.DATABASE_URL || '';
+
+  const configured = Boolean(supabaseUrl && supabaseKey);
+  res.json({
+    success: true,
+    configured,
+    supabaseUrl: supabaseUrl ? supabaseUrl.replace(/^(https?:\/\/[^\/]+).*/, '$1') : null,
+    hasKey: Boolean(supabaseKey),
+    hasDatabaseUrl: Boolean(databaseUrl)
+  });
+});
+
 app.get('/api/db/status', (req, res) => {
   try {
     const stats = fs.existsSync(SYSTEM_DB_FILE) ? fs.statSync(SYSTEM_DB_FILE) : null;

@@ -1,5 +1,4 @@
 services:
-
   app:
     build:
       context: .
@@ -10,50 +9,7 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3000
-      MYSQL_HOST: db
-      MYSQL_PORT: 3306
-      MYSQL_USER: root
-      MYSQL_PASSWORD: root_password
-      MYSQL_DATABASE: palace_bistro_pos
-    depends_on:
-      db:
-        condition: service_healthy
-    networks:
-      - pos_network
-
-  db:
-    image: mysql:8.0
-    restart: always
-    environment:
-      MYSQL_ROOT_PASSWORD: root_password
-      MYSQL_DATABASE: palace_bistro_pos
-    volumes:
-      - mysql_data:/var/lib/mysql
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-proot_password"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-    networks:
-      - pos_network
-
-  phpmyadmin:
-    image: phpmyadmin/phpmyadmin:latest
-    restart: always
-    environment:
-      PMA_HOST: db
-      PMA_PORT: 3306
-      MYSQL_ROOT_PASSWORD: root_password
-    depends_on:
-      db:
-        condition: service_healthy
-    networks:
-      - pos_network
-
-volumes:
-  mysql_data:
-
-networks:
-  pos_network:
-    driver: bridge
-
+      SUPABASE_URL: ${SUPABASE_URL:-}
+      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY:-}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-}
+      DATABASE_URL: ${DATABASE_URL:-}
