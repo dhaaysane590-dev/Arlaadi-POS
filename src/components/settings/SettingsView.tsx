@@ -422,7 +422,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     const element = document.createElement("a");
     const file = new Blob([dumpText], {type: 'text/plain'});
     element.href = URL.createObjectURL(file);
-    element.download = `RMS_Database_Backup_${new Date().toISOString().split('T')[0]}.sql`;
+    element.download = `Arlaadi_POS_Database_Backup_${new Date().toISOString().split('T')[0]}.sql`;
     document.body.appendChild(element);
     element.click();
     document.body.removeChild(element);
@@ -430,7 +430,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
   const handleExportJsonBackup = () => {
     const backupObject = {
-      app: form.name || 'Restaurant System',
+      app: form.name || 'Arlaadi POS',
       version: '2.5.0',
       exportedAt: new Date().toISOString(),
       ...(allAppData || { settings: form })
@@ -440,7 +440,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(backupObject, null, 2));
     const downloadAnchor = document.createElement('a');
     downloadAnchor.setAttribute("href", dataStr);
-    downloadAnchor.setAttribute("download", `RMS_System_Backup_${new Date().toISOString().split('T')[0]}.json`);
+    downloadAnchor.setAttribute("download", `Arlaadi_POS_System_Backup_${new Date().toISOString().split('T')[0]}.json`);
     document.body.appendChild(downloadAnchor);
     downloadAnchor.click();
     downloadAnchor.remove();
