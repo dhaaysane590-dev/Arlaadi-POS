@@ -62,36 +62,65 @@ function getItem<T>(key: string, defaultValue: T): T {
 
 let syncTimeout: any = null;
 
-export function triggerMySqlSync(): void {
+export function triggerSystemDbSync(): void {
   if (syncTimeout) clearTimeout(syncTimeout);
   syncTimeout = setTimeout(async () => {
     try {
+      const tenantsList = db.getTenants();
+      const restaurantsList = tenantsList.map(t => ({
+        ...t,
+        contact_info: {
+          phone: t.phone || '',
+          email: t.email || '',
+          address: t.address || ''
+        },
+        limits: t.limits || {
+          maxEmployees: 20,
+          maxTables: 30,
+          maxOrdersPerDay: 1000,
+          maxMenuItems: 150,
+          maxBranches: 2
+        }
+      }));
+
       const payload = {
         settings: db.getSettings(),
         categories: db.getCategories(),
-        menuItems: db.getMenuItems(),
+        menu_items: db.getMenuItems(),
         customers: db.getCustomers(),
         orders: db.getOrders(),
         inventory: db.getInventory(),
         expenses: db.getExpenses(),
         employees: db.getEmployees(),
         tables: db.getTables(),
-        tenants: db.getTenants(),
+        restaurants: restaurantsList,
+        tenants: restaurantsList,
+        reservations: db.getReservations(),
+        floors: db.getFloors(),
+        pos_day_history: db.getPosDayHistory(),
       };
 
-      const res = await fetch('/api/mysql/sync-all', {
+      // 1. Sync to System Database File (data/system_database.db)
+      fetch('/api/db/sync-all', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
-      });
-      
-      if (res.ok) {
-        console.log('[MySQL Sync] Live data stored directly in phpMyAdmin MySQL database.');
-      }
+      }).catch(() => {});
+
+      // 2. Sync to MySQL / phpMyAdmin if active
+      fetch('/api/mysql/sync-all', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      }).catch(() => {});
     } catch (err) {
-      // Ignore if local node server/mysql server is offline
+      // Ignore offline server
     }
   }, 300);
+}
+
+export function triggerMySqlSync(): void {
+  triggerSystemDbSync();
 }
 
 function setItem<T>(key: string, value: T): void {
@@ -228,6 +257,60 @@ export const db = {
   // Tenants & Multi-Restaurant Control
   getTenants: (): RestaurantTenant[] => getItem<RestaurantTenant[]>(DB_KEYS.TENANTS, initialTenants),
   saveTenants: (tenants: RestaurantTenant[]) => setItem(DB_KEYS.TENANTS, tenants),
+
+  // Direct Server Database File CRUD Operations
+  createRestaurantInServerDb: async (tenantData: RestaurantTenant): Promise<boolean> => {
+    try {
+      const payload = {
+        ...tenantData,
+        contact_info: {
+          phone: tenantData.phone || '',
+          email: tenantData.email || '',
+          address: tenantData.address || ''
+        },
+        limits: tenantData.limits || {
+          maxEmployees: 20,
+          maxTables: 30,
+          maxOrdersPerDay: 1000,
+          maxMenuItems: 150,
+          maxBranches: 2
+        }
+      };
+
+      const res = await fetch('/api/db/restaurants', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      return res.ok;
+    } catch (e) {
+      return false;
+    }
+  },
+
+  updateRestaurantInServerDb: async (id: string, tenantData: Partial<RestaurantTenant>): Promise<boolean> => {
+    try {
+      const res = await fetch(`/api/db/restaurants/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(tenantData)
+      });
+      return res.ok;
+    } catch (e) {
+      return false;
+    }
+  },
+
+  deleteRestaurantInServerDb: async (id: string): Promise<boolean> => {
+    try {
+      const res = await fetch(`/api/db/restaurants/${id}`, {
+        method: 'DELETE'
+      });
+      return res.ok;
+    } catch (e) {
+      return false;
+    }
+  },
 
   getActiveTenantId: (): string => getItem<string>(DB_KEYS.ACTIVE_TENANT_ID, 'rest-1'),
   saveActiveTenantId: (id: string) => setItem(DB_KEYS.ACTIVE_TENANT_ID, id),

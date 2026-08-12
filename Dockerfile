@@ -1,33 +1,33 @@
 # Stage 1: Build the application
-FROM oven/bun:1 AS builder
+FROM node:20-alpine AS builder
 
 WORKDIR /app
 
 # Copy dependency definitions
-COPY package.json bun.lock ./
+COPY package*.json ./
 
 # Install dependencies
-RUN bun install --frozen-lockfile
+RUN npm ci
 
 # Copy source files
 COPY . .
 
 # Build Vite frontend and bundled server.cjs
-RUN bun run build
+RUN npm run build
 
 # Stage 2: Production runner
-FROM oven/bun:1 AS runner
+FROM node:20-alpine AS runner
 
 WORKDIR /app
 
 ENV NODE_ENV=production
 ENV PORT=3000
 
-# Copy dependency definitions
-COPY package.json bun.lock ./
+# Copy package.json for production dependencies if needed
+COPY package*.json ./
 
-# Install dependencies (full install: vite is required at runtime by the bundled server)
-RUN bun install --frozen-lockfile
+# Install only production dependencies
+RUN npm ci --only=production
 
 # Copy built dist files from builder stage
 COPY --from=builder /app/dist ./dist
@@ -36,4 +36,4 @@ COPY --from=builder /app/dist ./dist
 EXPOSE 3000
 
 # Start production application
-CMD ["bun", "dist/server.cjs"]
+CMD ["node", "dist/server.cjs"]

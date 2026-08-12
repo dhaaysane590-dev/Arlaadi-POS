@@ -37,6 +37,14 @@ export type UserRole =
 
 export type RolePermissions = Record<string, Record<RestaurantFeatureKey, boolean>>;
 
+export interface RestaurantLimits {
+  maxEmployees?: number;
+  maxTables?: number;
+  maxOrdersPerDay?: number;
+  maxMenuItems?: number;
+  maxBranches?: number;
+}
+
 export interface RestaurantTenant {
   id: string;
   code: string;
@@ -55,6 +63,7 @@ export interface RestaurantTenant {
   rolePermissions?: RolePermissions;
   username?: string;
   pin?: string;
+  limits?: RestaurantLimits;
 }
 
 export interface User {

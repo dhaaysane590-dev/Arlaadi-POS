@@ -1,8 +1,10 @@
 import express from 'express';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 import mysql from 'mysql2/promise';
 import { createServer as createViteServer } from 'vite';
+import { systemDb, SYSTEM_DB_FILE } from './src/server/systemDbManager';
 
 const currentFilename = typeof __filename !== 'undefined' ? __filename : (import.meta?.url ? fileURLToPath(import.meta.url) : '');
 const currentDirname = typeof __dirname !== 'undefined' ? __dirname : path.dirname(currentFilename);
@@ -246,6 +248,166 @@ async function createTablesIfNotExist() {
   }
   console.log('[MySQL Init] All 12 phpMyAdmin database tables verified/created successfully!');
 }
+
+// ==============================================================================
+// SYSTEM DATABASE FILE API ENDPOINTS (data/system_database.db)
+// ==============================================================================
+
+// 1. Get System Database Status & Metadata
+app.get('/api/db/status', (req, res) => {
+  try {
+    const stats = fs.existsSync(SYSTEM_DB_FILE) ? fs.statSync(SYSTEM_DB_FILE) : null;
+    const restaurants = systemDb.getRestaurants();
+    res.json({
+      success: true,
+      active: true,
+      databaseFile: SYSTEM_DB_FILE,
+      fileExists: !!stats,
+      fileSizeBytes: stats ? stats.size : 0,
+      restaurantsCount: restaurants.length,
+      lastUpdated: systemDb.getFullState().meta.lastUpdated,
+      systemName: systemDb.getFullState().meta.systemName,
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 2. GET all restaurants from system database file
+app.get('/api/db/restaurants', (req, res) => {
+  try {
+    const restaurants = systemDb.getRestaurants();
+    res.json({ success: true, count: restaurants.length, data: restaurants });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 3. GET restaurant by ID
+app.get('/api/db/restaurants/:id', (req, res) => {
+  try {
+    const restaurant = systemDb.getRestaurantById(req.params.id);
+    if (!restaurant) {
+      return res.status(404).json({ success: false, error: 'Restaurant not found' });
+    }
+    res.json({ success: true, data: restaurant });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 4. CREATE new restaurant in system database file
+app.post('/api/db/restaurants', (req, res) => {
+  try {
+    const restaurantData = req.body;
+    if (!restaurantData || !restaurantData.name) {
+      return res.status(400).json({ success: false, error: 'Restaurant name is required' });
+    }
+    const created = systemDb.createRestaurant(restaurantData);
+    res.json({
+      success: true,
+      message: 'Restaurant information, contact info, logo, and limits successfully saved to database file!',
+      data: created
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 5. UPDATE existing restaurant in system database file
+app.put('/api/db/restaurants/:id', (req, res) => {
+  try {
+    const updated = systemDb.updateRestaurant(req.params.id, req.body);
+    res.json({
+      success: true,
+      message: 'Restaurant updated in system database file',
+      data: updated
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 6. DELETE restaurant from system database file
+app.delete('/api/db/restaurants/:id', (req, res) => {
+  try {
+    const deleted = systemDb.deleteRestaurant(req.params.id);
+    res.json({ success: deleted, message: deleted ? 'Restaurant removed from database file' : 'Restaurant not found' });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 7. GET full database state
+app.get('/api/db/all', (req, res) => {
+  try {
+    res.json({ success: true, data: systemDb.getFullState() });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 8. Bulk Sync entire state to system database file
+app.post('/api/db/sync-all', (req, res) => {
+  try {
+    const fullPayload = req.body;
+    systemDb.updateFullState(fullPayload);
+    res.json({
+      success: true,
+      message: 'All system data (settings, restaurants, orders, inventory, staff) saved to system database file (data/system_database.db)',
+      lastUpdated: new Date().toISOString()
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 9. Download database file
+app.get('/api/db/download', (req, res) => {
+  if (fs.existsSync(SYSTEM_DB_FILE)) {
+    res.download(SYSTEM_DB_FILE, 'system_database.db');
+  } else {
+    res.status(404).send('Database file not found');
+  }
+});
+
+// 10. Universal Collection Endpoint GET
+app.get('/api/db/:collection', (req, res) => {
+  try {
+    const collectionName = req.params.collection as any;
+    const data = systemDb.getCollection(collectionName);
+    res.json({ success: true, count: data.length, data });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 11. Universal Collection Endpoint UPSERT
+app.post('/api/db/:collection', (req, res) => {
+  try {
+    const collectionName = req.params.collection as any;
+    const item = req.body;
+    if (!item || !item.id) {
+      return res.status(400).json({ success: false, error: 'Item id is required for collection mutation' });
+    }
+    const updated = systemDb.updateCollectionItem(collectionName, item.id, item);
+    res.json({ success: true, data: updated });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 12. Universal Collection Endpoint DELETE
+app.delete('/api/db/:collection/:id', (req, res) => {
+  try {
+    const collectionName = req.params.collection as any;
+    const id = req.params.id;
+    const deleted = systemDb.deleteCollectionItem(collectionName, id);
+    res.json({ success: deleted });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
 
 // ==============================================================================
 // MYSQL API ENDPOINTS

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { db } from './utils/db';
+import { db, triggerSystemDbSync } from './utils/db';
 import {
   User,
   UserRole,
@@ -249,6 +249,7 @@ export default function App() {
   useEffect(() => { db.saveMenuItems(menuItems); }, [menuItems]);
   useEffect(() => { db.saveCategories(categories); }, [categories]);
   useEffect(() => { db.saveTables(tables); }, [tables]);
+  useEffect(() => { db.saveTenants(tenants); triggerSystemDbSync(); }, [tenants]);
   useEffect(() => { db.saveReservations(reservations); }, [reservations]);
   useEffect(() => { db.saveInventory(ingredients as any); }, [ingredients]);
   useEffect(() => { db.saveEmployees(employees); }, [employees]);

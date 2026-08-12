@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { db, triggerSystemDbSync } from '../../utils/db';
 import {
   RestaurantTenant,
   RestaurantFeatures,
@@ -23,6 +24,10 @@ import {
   ToggleRight,
   Store,
   DollarSign,
+  Trash2,
+  Database,
+  Download,
+  RefreshCw,
   Info,
   RotateCcw,
   Eye
@@ -136,6 +141,11 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
   const [formTaxRate, setFormTaxRate] = useState<number>(5);
   const [formLogo, setFormLogo] = useState<string>('https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=160&q=80');
   const [formFeatures, setFormFeatures] = useState<RestaurantFeatures>({ ...DEFAULT_ALL_FEATURES });
+  const [formMaxEmployees, setFormMaxEmployees] = useState<number>(20);
+  const [formMaxTables, setFormMaxTables] = useState<number>(30);
+  const [formMaxOrdersPerDay, setFormMaxOrdersPerDay] = useState<number>(1000);
+  const [formMaxMenuItems, setFormMaxMenuItems] = useState<number>(150);
+  const [formMaxBranches, setFormMaxBranches] = useState<number>(2);
   const [visiblePins, setVisiblePins] = useState<Record<string, boolean>>({});
 
   const togglePinVisibility = (tenantId: string) => {
@@ -225,6 +235,11 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
     setFormTaxRate(5);
     setFormLogo('https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=160&q=80');
     setFormFeatures({ ...DEFAULT_ALL_FEATURES });
+    setFormMaxEmployees(20);
+    setFormMaxTables(30);
+    setFormMaxOrdersPerDay(1000);
+    setFormMaxMenuItems(150);
+    setFormMaxBranches(2);
     setEditingTenant(null);
   };
 
@@ -249,6 +264,11 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
     setFormTaxRate(t.taxRate);
     setFormLogo(t.logo);
     setFormFeatures({ ...t.features });
+    setFormMaxEmployees(t.limits?.maxEmployees ?? 20);
+    setFormMaxTables(t.limits?.maxTables ?? 30);
+    setFormMaxOrdersPerDay(t.limits?.maxOrdersPerDay ?? 1000);
+    setFormMaxMenuItems(t.limits?.maxMenuItems ?? 150);
+    setFormMaxBranches(t.limits?.maxBranches ?? 2);
     setShowRegisterModal(true);
   };
 
@@ -258,31 +278,37 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
 
     const finalUsername = formUsername.trim() || formCode.toLowerCase().replace('-', '_');
     const finalPin = formPin.trim() || '1234';
+    const limitsObj = {
+      maxEmployees: formMaxEmployees,
+      maxTables: formMaxTables,
+      maxOrdersPerDay: formMaxOrdersPerDay,
+      maxMenuItems: formMaxMenuItems,
+      maxBranches: formMaxBranches
+    };
 
     if (editingTenant) {
-      const updatedList = tenants.map(t => {
-        if (t.id === editingTenant.id) {
-          return {
-            ...t,
-            name: formName,
-            code: formCode,
-            ownerName: formOwnerName,
-            username: finalUsername,
-            pin: finalPin,
-            email: formEmail,
-            phone: formPhone,
-            address: formAddress,
-            plan: formPlan,
-            status: formStatus,
-            currencySymbol: formCurrency,
-            taxRate: formTaxRate,
-            logo: formLogo,
-            features: { ...formFeatures }
-          };
-        }
-        return t;
-      });
+      const updatedTenant: RestaurantTenant = {
+        ...editingTenant,
+        name: formName,
+        code: formCode,
+        ownerName: formOwnerName,
+        username: finalUsername,
+        pin: finalPin,
+        email: formEmail,
+        phone: formPhone,
+        address: formAddress,
+        plan: formPlan,
+        status: formStatus,
+        currencySymbol: formCurrency,
+        taxRate: formTaxRate,
+        logo: formLogo,
+        features: { ...formFeatures },
+        limits: limitsObj
+      };
+
+      const updatedList = tenants.map(t => t.id === editingTenant.id ? updatedTenant : t);
       onUpdateTenants(updatedList);
+      db.updateRestaurantInServerDb(editingTenant.id, updatedTenant);
     } else {
       const newTenant: RestaurantTenant = {
         id: 'rest-' + Date.now(),
@@ -300,9 +326,11 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
         taxRate: formTaxRate,
         logo: formLogo || 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=160&q=80',
         createdAt: new Date().toISOString().split('T')[0],
-        features: { ...formFeatures }
+        features: { ...formFeatures },
+        limits: limitsObj
       };
       onUpdateTenants([...tenants, newTenant]);
+      db.createRestaurantInServerDb(newTenant);
     }
 
     setShowRegisterModal(false);
@@ -334,6 +362,54 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
       return t;
     });
     onUpdateTenants(updated);
+  };
+
+  // Delete Confirmation Modal State
+  const [deletingTenant, setDeletingTenant] = useState<{ id: string; name: string } | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const requestDeleteTenant = (id: string, name: string) => {
+    setDeletingTenant({ id, name });
+  };
+
+  const confirmDeleteTenant = async () => {
+    if (!deletingTenant) return;
+    const { id, name } = deletingTenant;
+
+    const filtered = tenants.filter(t => t.id !== id);
+    onUpdateTenants(filtered);
+    db.saveTenants(filtered);
+
+    if (id === activeTenantId && filtered.length > 0) {
+      onSelectActiveTenant(filtered[0].id);
+      db.saveActiveTenantId(filtered[0].id);
+    }
+
+    if (editingTenant?.id === id) {
+      setEditingTenant(null);
+      setShowRegisterModal(false);
+    }
+    if (selectedTenantForLimits?.id === id) {
+      setSelectedTenantForLimits(null);
+    }
+    if (selectedRoleTenantId === id) {
+      setSelectedRoleTenantId(filtered[0]?.id || '');
+    }
+
+    try {
+      await db.deleteRestaurantInServerDb(id);
+    } catch (err) {
+      console.error('Failed to delete restaurant from server database:', err);
+    }
+
+    triggerSystemDbSync();
+
+    setToastMessage(`Restaurant "${name}" has been permanently deleted.`);
+    setDeletingTenant(null);
+
+    setTimeout(() => {
+      setToastMessage(null);
+    }, 4000);
   };
 
   const filteredTenants = tenants.filter(t => {
@@ -373,6 +449,93 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
             <Plus className="w-4 h-4" />
             <span>Register New Restaurant</span>
           </button>
+        </div>
+      </div>
+
+      {/* Toast Notification Banner */}
+      {toastMessage && (
+        <div className="alert alert-success alert-dismissible fade show d-flex align-items-center justify-content-between shadow-sm mb-4 rounded-3 border-0 bg-success text-white" role="alert">
+          <div className="d-flex align-items-center gap-2">
+            <CheckCircle2 className="w-5 h-5 text-white" />
+            <span className="fw-bold">{toastMessage}</span>
+          </div>
+          <button type="button" className="btn-close btn-close-white" onClick={() => setToastMessage(null)}></button>
+        </div>
+      )}
+
+      {/* System Database File Banner */}
+      <div className="card border-0 shadow-sm rounded-3 overflow-hidden mb-4 bg-gradient text-white" style={{ background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)' }}>
+        <div className="card-body p-3.5 d-flex flex-wrap align-items-center justify-content-between gap-3">
+          <div className="d-flex align-items-center gap-3">
+            <div className="p-2.5 bg-danger bg-opacity-20 text-danger rounded-3 border border-danger-subtle">
+              <Database className="w-6 h-6 text-danger" />
+            </div>
+            <div>
+              <div className="d-flex align-items-center gap-2">
+                <h6 className="fw-bold mb-0 text-white">System Database File (`data/system_database.db`)</h6>
+                <span className="badge bg-success text-white px-2 py-0.5 text-xs">Full CRUD Active</span>
+              </div>
+              <p className="small text-slate-300 mb-0 mt-0.5">
+                All restaurant accounts, logos, contact details, limits, settings, menus, and orders are continuously saved to the server DB file with real-time CRUD persistence.
+              </p>
+            </div>
+          </div>
+
+          <div className="d-flex align-items-center gap-2">
+            <button
+              type="button"
+              onClick={async () => {
+                const tenantsList = tenants.map(t => ({
+                  ...t,
+                  contact_info: { phone: t.phone, email: t.email, address: t.address },
+                  limits: t.limits || { maxEmployees: 20, maxTables: 30, maxOrdersPerDay: 1000, maxMenuItems: 150, maxBranches: 2 }
+                }));
+                const payload = {
+                  settings: db.getSettings(),
+                  categories: db.getCategories(),
+                  menu_items: db.getMenuItems(),
+                  customers: db.getCustomers(),
+                  orders: db.getOrders(),
+                  inventory: db.getInventory(),
+                  expenses: db.getExpenses(),
+                  employees: db.getEmployees(),
+                  tables: db.getTables(),
+                  restaurants: tenantsList,
+                  tenants: tenantsList,
+                  reservations: db.getReservations(),
+                  floors: db.getFloors(),
+                  pos_day_history: db.getPosDayHistory(),
+                };
+                try {
+                  const res = await fetch('/api/db/sync-all', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                  });
+                  if (res.ok) {
+                    alert('Successfully synchronized full system data into data/system_database.db file!');
+                  }
+                } catch (e) {
+                  alert('Error saving to database file');
+                }
+              }}
+              className="btn btn-sm btn-outline-light d-flex align-items-center gap-1.5 fw-semibold"
+              title="Save all local changes into system_database.db"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>Sync All to DB File</span>
+            </button>
+
+            <a
+              href="/api/db/download"
+              download="system_database.db"
+              className="btn btn-sm btn-danger d-flex align-items-center gap-1.5 fw-bold"
+              title="Download database file directly"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Download DB File</span>
+            </a>
+          </div>
         </div>
       </div>
 
@@ -574,9 +737,26 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
                           <span className="text-muted">Plan & Tax:</span>
                           <span className="fw-bold text-primary">{tenant.plan} Plan ({tenant.taxRate}% Tax)</span>
                         </div>
-                        <div className="d-flex justify-content-between">
+                        <div className="d-flex justify-content-between mb-1">
+                          <span className="text-muted">Phone / Contact:</span>
+                          <span className="fw-semibold text-dark">{tenant.phone || tenant.email}</span>
+                        </div>
+                        <div className="d-flex justify-content-between mb-1">
                           <span className="text-muted">Address:</span>
                           <span className="text-truncate text-muted">{tenant.address}</span>
+                        </div>
+
+                        {/* Database Stored Limits */}
+                        <div className="p-2 rounded-2 mt-2 bg-danger-subtle border border-danger-subtle">
+                          <div className="text-xs fw-bold text-danger mb-1 d-flex align-items-center justify-content-between">
+                            <span>DB System Limits:</span>
+                            <span className="badge bg-danger text-white">data/system_database.db</span>
+                          </div>
+                          <div className="d-flex flex-wrap gap-2 text-xs font-monospace text-dark fw-semibold">
+                            <span>Staff: {tenant.limits?.maxEmployees ?? 20}</span> |
+                            <span>Tables: {tenant.limits?.maxTables ?? 30}</span> |
+                            <span>Orders/Day: {tenant.limits?.maxOrdersPerDay ?? 1000}</span>
+                          </div>
                         </div>
                       </div>
 
@@ -641,10 +821,18 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
 
                       <button
                         onClick={() => handleToggleTenantStatus(tenant.id)}
-                        className={`btn btn-sm p-1.5 ${tenant.status === 'Active' ? 'btn-outline-danger' : 'btn-outline-success'}`}
+                        className={`btn btn-sm p-1.5 ${tenant.status === 'Active' ? 'btn-outline-warning' : 'btn-outline-success'}`}
                         title={tenant.status === 'Active' ? 'Suspend Restaurant' : 'Activate Restaurant'}
                       >
                         {tenant.status === 'Active' ? <XCircle className="w-3.5 h-3.5" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+                      </button>
+
+                      <button
+                        onClick={() => requestDeleteTenant(tenant.id, tenant.name)}
+                        className="btn btn-sm btn-outline-danger p-1.5"
+                        title="Delete restaurant from database file"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
 
@@ -674,7 +862,17 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
                   <th style={{ minWidth: '220px' }}>Module / Feature</th>
                   {tenants.map(t => (
                     <th key={t.id} className="text-center" style={{ minWidth: '160px' }}>
-                      <div className="fw-bold text-truncate" style={{ maxWidth: '160px' }}>{t.name}</div>
+                      <div className="d-flex align-items-center justify-content-center gap-1">
+                        <span className="fw-bold text-truncate" style={{ maxWidth: '120px' }}>{t.name}</span>
+                        <button
+                          type="button"
+                          onClick={() => requestDeleteTenant(t.id, t.name)}
+                          className="btn btn-xs text-danger p-0 ms-1 border-0 bg-transparent"
+                          title={`Delete ${t.name} from database`}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                       <span className="small text-muted font-monospace font-normal">{t.code}</span>
                     </th>
                   ))}
@@ -1125,6 +1323,61 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
                         onChange={(e) => setFormLogo(e.target.value)}
                       />
                     </div>
+
+                    {/* Operational Limits Section */}
+                    <div className="col-12 border-top pt-3">
+                      <h6 className="fw-bold mb-2 text-danger d-flex align-items-center gap-1.5">
+                        <Sliders className="w-4 h-4" />
+                        <span>System Operational Limits for Database File</span>
+                      </h6>
+                      <div className="row g-2 p-3 bg-light rounded-3 border border-secondary-subtle">
+                        <div className="col-6 col-md-4">
+                          <label className="form-label text-xs fw-semibold">Max Staff / Employees</label>
+                          <input
+                            type="number"
+                            className="form-control form-control-sm font-monospace fw-bold"
+                            value={formMaxEmployees}
+                            onChange={(e) => setFormMaxEmployees(parseInt(e.target.value) || 0)}
+                          />
+                        </div>
+                        <div className="col-6 col-md-4">
+                          <label className="form-label text-xs fw-semibold">Max Dining Tables</label>
+                          <input
+                            type="number"
+                            className="form-control form-control-sm font-monospace fw-bold"
+                            value={formMaxTables}
+                            onChange={(e) => setFormMaxTables(parseInt(e.target.value) || 0)}
+                          />
+                        </div>
+                        <div className="col-6 col-md-4">
+                          <label className="form-label text-xs fw-semibold">Max Orders / Day</label>
+                          <input
+                            type="number"
+                            className="form-control form-control-sm font-monospace fw-bold"
+                            value={formMaxOrdersPerDay}
+                            onChange={(e) => setFormMaxOrdersPerDay(parseInt(e.target.value) || 0)}
+                          />
+                        </div>
+                        <div className="col-6 col-md-6">
+                          <label className="form-label text-xs fw-semibold">Max Food Menu Items</label>
+                          <input
+                            type="number"
+                            className="form-control form-control-sm font-monospace fw-bold"
+                            value={formMaxMenuItems}
+                            onChange={(e) => setFormMaxMenuItems(parseInt(e.target.value) || 0)}
+                          />
+                        </div>
+                        <div className="col-6 col-md-6">
+                          <label className="form-label text-xs fw-semibold">Max Restaurant Branches</label>
+                          <input
+                            type="number"
+                            className="form-control form-control-sm font-monospace fw-bold"
+                            value={formMaxBranches}
+                            onChange={(e) => setFormMaxBranches(parseInt(e.target.value) || 0)}
+                          />
+                        </div>
+                      </div>
+                    </div>
                   </div>
 
                   {/* Feature allocation toggles section */}
@@ -1164,13 +1417,30 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
 
                 </div>
 
-                <div className="modal-footer bg-light p-3 d-flex justify-content-end gap-2">
-                  <button type="button" className="btn btn-secondary" onClick={() => setShowRegisterModal(false)}>
-                    Cancel
-                  </button>
-                  <button type="submit" className="btn btn-danger fw-bold px-4">
-                    {editingTenant ? 'Save Changes' : 'Register Restaurant'}
-                  </button>
+                <div className="modal-footer bg-light p-3 d-flex align-items-center justify-content-between gap-2">
+                  <div>
+                    {editingTenant && (
+                      <button
+                        type="button"
+                        className="btn btn-outline-danger d-flex align-items-center gap-1.5 fw-semibold"
+                        onClick={() => {
+                          setShowRegisterModal(false);
+                          requestDeleteTenant(editingTenant.id, editingTenant.name);
+                        }}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                        <span>Delete Restaurant</span>
+                      </button>
+                    )}
+                  </div>
+                  <div className="d-flex align-items-center gap-2">
+                    <button type="button" className="btn btn-secondary" onClick={() => setShowRegisterModal(false)}>
+                      Cancel
+                    </button>
+                    <button type="submit" className="btn btn-danger fw-bold px-4">
+                      {editingTenant ? 'Save Changes' : 'Register Restaurant'}
+                    </button>
+                  </div>
                 </div>
               </form>
 
@@ -1238,6 +1508,53 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
               <div className="modal-footer bg-light p-3">
                 <button type="button" className="btn btn-dark fw-bold px-4" onClick={() => setSelectedTenantForLimits(null)}>
                   Close & Done
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* DELETE CONFIRMATION MODAL */}
+      {deletingTenant && (
+        <div className="modal show d-block bg-dark bg-opacity-75" style={{ zIndex: 1065 }} tabIndex={-1}>
+          <div className="modal-dialog modal-dialog-centered">
+            <div className={`modal-content border-0 shadow-lg rounded-4 overflow-hidden ${isDarkMode ? 'bg-dark text-white border border-secondary' : 'bg-white text-dark'}`}>
+              <div className="modal-header bg-danger text-white border-0 p-3.5">
+                <div className="d-flex align-items-center gap-2">
+                  <Trash2 className="w-5 h-5" />
+                  <h5 className="modal-title h6 fw-bold mb-0">Confirm Delete Restaurant</h5>
+                </div>
+                <button
+                  type="button"
+                  className="btn-close btn-close-white"
+                  onClick={() => setDeletingTenant(null)}
+                ></button>
+              </div>
+              <div className="modal-body p-4 text-center">
+                <div className="rounded-circle bg-danger bg-opacity-10 text-danger p-3 d-inline-flex mb-3">
+                  <Trash2 className="w-8 h-8" />
+                </div>
+                <h6 className="fw-bold fs-5 mb-2">Delete "{deletingTenant.name}"?</h6>
+                <p className="text-muted small mb-0">
+                  Are you sure you want to delete this restaurant? This will permanently remove <strong>{deletingTenant.name}</strong> from the system and the server database file (`data/system_database.db`).
+                </p>
+              </div>
+              <div className="modal-footer bg-light p-3 d-flex align-items-center justify-content-end gap-2 border-0">
+                <button
+                  type="button"
+                  className="btn btn-secondary px-3 py-2 fw-semibold"
+                  onClick={() => setDeletingTenant(null)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-danger px-4 py-2 fw-bold d-flex align-items-center gap-2"
+                  onClick={confirmDeleteTenant}
+                >
+                  <Trash2 className="w-4 h-4" />
+                  <span>Yes, Delete Restaurant</span>
                 </button>
               </div>
             </div>
